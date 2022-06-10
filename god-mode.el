@@ -191,11 +191,33 @@ If it was not active when `god-local-mode-pause' was called, nothing happens."
 (define-key universal-argument-map (kbd "u")
   #'god-mode-maybe-universal-argument-more)
 
+(defun god-mode-to-char (x)
+  (cond ((eq x nil) nil)
+	;((numberp x) (byte-to-string x))
+	((arrayp x) (god-mode-to-char (aref x 0)))
+	((listp x) (god-mode-to-char (cdr x)))
+	(t x)))
+
+(defun god-mode-translate-key (key)
+  (if (eq current-input-method nil)
+      key
+    (progn
+      (setq qdict
+	    (mapcar
+	     (lambda (q) (list (god-mode-to-char (car q)) (god-mode-to-char (cadr q))))
+	     (cl-remove-if-not (lambda (x) (not (eq x nil))) (quail-map))))
+      (message "%s %s" key (rassoc key qdict))
+      (let ((translated-key (car (rassoc (list key) qdict))))
+	(if (eq translated-key nil)
+	    key
+	  translated-key)))))
+
 (defun god-mode-self-insert ()
   "Handle self-insert keys."
   (interactive)
-  (let* ((initial-key (aref (this-command-keys-vector)
-                            (- (length (this-command-keys-vector)) 1)))
+  (let* ((initial-key (god-mode-translate-key
+		       (aref (this-command-keys-vector)
+			     (- (length (this-command-keys-vector)) 1))))
          (binding (god-mode-lookup-key-sequence initial-key)))
     (when binding
       ;; For now, set the shift-translation status only for alphabetic keys.
@@ -299,7 +321,7 @@ Appends to key sequence KEY-STRING-SO-FAR."
     (setq next-key
           (if key-consumed
               (god-mode-sanitized-key-string (read-event key-string-so-far))
-            key))
+            (god-mode-translate-key key)))
     (if (and key-string-so-far (string= next-key (format "%c" help-char)))
         (god-mode-help-char-dispatch next-key key-string-so-far)
       (when (and (= (length next-key) 1)
